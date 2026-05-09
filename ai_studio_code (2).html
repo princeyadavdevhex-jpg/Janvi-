@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus Mega Arsenal - Agentic Orchestration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* Prevents native mobile scrolling */
+        }
+
+        .canvas-bg {
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 24px 24px;
+            width: 500vw;
+            height: 500vh;
+            position: absolute;
+            top: -200vh;
+            left: -200vw;
+            transform-origin: center center;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .node-handle { transition: all 0.2s ease; }
+        .node-handle:hover, .node-handle.glow {
+            background-color: #22d3ee;
+            border-color: #cffafe;
+            box-shadow: 0 0 12px rgba(34, 211, 238, 0.8);
+            transform: scale(1.3);
+        }
+
+        .wire-path {
+            stroke-dasharray: 10;
+            animation: flow 1s linear infinite;
+        }
+        @keyframes flow { to { stroke-dashoffset: -20; } }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        /* Ghost element for mobile drag & drop */
+        #drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.8;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+    </style>
+</head>
+<body class="w-screen h-[100dvh] flex relative">
+
+    <!-- MOBILE SIDEBAR TOGGLE -->
+    <button id="btn-toggle-sidebar" class="md:hidden absolute top-4 left-4 z-50 p-2 bg-slate-800 border border-slate-700 rounded-lg shadow-xl text-white">
+        <i data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+
+    <!-- MAIN CANVAS AREA -->
+    <main id="canvas-container" class="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing w-full h-full">
+        <div id="transform-layer" class="absolute inset-0" style="transform: translate(0px, 0px) scale(1);">
+            <div class="canvas-bg"></div>
+            <svg id="svg-layer" class="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-10"></svg>
+            <div id="nodes-layer" class="absolute inset-0 z-20"></div>
+        </div>
+    </main>
+
+    <!-- LEFT SIDEBAR: TOOL LIBRARY -->
+    <aside id="sidebar" class="w-72 h-full glass border-r border-slate-700 flex flex-col absolute left-0 top-0 z-40 shadow-2xl transform -translate-x-full md:translate-x-0 transition-transform duration-300">
+        <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg">
+                    <i data-lucide="hexagon" class="w-5 h-5 text-white"></i>
+                </div>
+                <h1 class="font-bold text-lg tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">NEXUS</h1>
+            </div>
+            <button id="btn-close-sidebar" class="md:hidden text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <div class="p-4">
+            <div class="relative">
+                <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-slate-400"></i>
+                <input type="text" id="search-tools" placeholder="Search tools..." class="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200 placeholder-slate-500">
+            </div>
+        </div>
+
+        <div id="tool-list" class="flex-1 overflow-y-auto p-4 space-y-3">
+            <!-- Tools injected via JS -->
+        </div>
+
+        <div class="p-4 border-t border-slate-700">
+            <button id="btn-create-custom" class="w-full py-2.5 rounded-lg border border-cyan-500/50 bg-cyan-500/10 text-cyan-400 font-medium text-sm flex items-center justify-center gap-2 hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                Create Custom Node
+            </button>
+        </div>
+    </aside>
+
+    <!-- RIGHT SIDEBAR: BYOK CONFIG DRAWER -->
+    <aside id="config-drawer" class="w-80 h-full glass border-l border-slate-700 absolute right-0 top-0 z-40 shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+            <h2 id="config-title" class="font-bold text-lg text-slate-100 flex items-center gap-2">
+                <i data-lucide="settings-2" class="w-5 h-5 text-cyan-400"></i>
+                Node Config
+            </h2>
+            <button id="btn-close-config" class="text-slate-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <div class="p-5 flex-1 overflow-y-auto space-y-5">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">System Prompt / Logic</label>
+                <textarea id="config-prompt" rows="6" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200 resize-none font-mono" placeholder="Enter instructions..."></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">API Key / Auth Token</label>
+                <input type="password" id="config-apikey" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200 font-mono" placeholder="sk-...">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Endpoint URL (Optional)</label>
+                <input type="text" id="config-endpoint" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200 font-mono" placeholder="https://api...">
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-slate-700 bg-slate-800/50">
+            <button id="btn-save-config" class="w-full py-2.5 rounded-lg bg-cyan-600 text-white font-medium text-sm hover:bg-cyan-500 hover:shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all">
+                Save Configuration
+            </button>
+        </div>
+    </aside>
+
+    <!-- BOTTOM EXECUTION TOOLBAR -->
+    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 glass border border-slate-700 rounded-full px-2 py-2 flex items-center gap-2 shadow-2xl w-[90%] md:w-auto justify-between md:justify-center">
+        <div class="flex items-center gap-1 px-2 border-r border-slate-600">
+            <button id="btn-zoom-out" class="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-full transition-colors" title="Zoom Out">
+                <i data-lucide="zoom-out" class="w-5 h-5"></i>
+            </button>
+            <span id="zoom-level" class="text-xs font-mono text-slate-400 w-10 text-center hidden md:inline-block">100%</span>
+            <button id="btn-zoom-in" class="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-full transition-colors" title="Zoom In">
+                <i data-lucide="zoom-in" class="w-5 h-5"></i>
+            </button>
+            <button id="btn-reset-view" class="p-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-full transition-colors" title="Reset View">
+                <i data-lucide="maximize" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <button id="btn-execute" class="ml-2 mr-1 px-4 md:px-6 py-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 font-bold text-sm flex items-center gap-2 hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:scale-105 transition-all duration-200 whitespace-nowrap">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+            Execute Workflow
+        </button>
+    </div>
+
+    <!-- GOD-MODE CUSTOM TOOL MODAL -->
+    <div id="custom-modal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-[480px] overflow-hidden transform scale-95 opacity-0 transition-all duration-200" id="custom-modal-content">
+            <div class="p-5 border-b border-slate-700 flex items-center justify-between bg-slate-800/50">
+                <h2 class="font-bold text-lg text-white flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5 text-cyan-400"></i>
+                    Build Custom Node
+                </h2>
+                <button id="btn-close-modal" class="text-slate-400 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Tool Name</label>
+                    <input type="text" id="custom-name" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-cyan-500 text-white" placeholder="e.g., Internal DB Query">
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Theme Color</label>
+                        <input type="color" id="custom-color" value="#a855f7" class="w-full h-10 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer p-1">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Icon (Lucide)</label>
+                        <input type="text" id="custom-icon" value="database" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-cyan-500 text-white">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Default API Endpoint</label>
+                    <input type="text" id="custom-api" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-cyan-500 text-white font-mono" placeholder="https://...">
+                </div>
+            </div>
+            <div class="p-5 border-t border-slate-700 bg-slate-800/50 flex justify-end gap-3">
+                <button id="btn-cancel-modal" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors">Cancel</button>
+                <button id="btn-save-custom" class="px-6 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-500 hover:shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all">Create Tool</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ghost Element for Mobile Dragging -->
+    <div id="drag-ghost" class="bg-slate-800 border border-slate-500 rounded-xl p-3 shadow-2xl flex items-center gap-3">
+        <div id="ghost-icon-container" class="w-10 h-10 rounded-lg flex items-center justify-center shadow-inner">
+            <i id="ghost-icon" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <h3 id="ghost-title" class="text-sm font-semibold text-white"></h3>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
